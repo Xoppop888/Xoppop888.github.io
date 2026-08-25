@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#0E7C54"/>
-  <circle cx="256" cy="256" r="150" fill="#3ECF8E"/>
-  <circle cx="256" cy="256" r="150" fill="none" stroke="#2BB37A" stroke-width="10"/>
-  <circle cx="256" cy="256" r="116" fill="none" stroke="#0A5C3E" stroke-width="6" stroke-dasharray="20 14" stroke-linecap="round"/>
-  <text x="256" y="262" text-anchor="middle" dominant-baseline="central"
-        font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="148"
-        fill="#0A5C3E">М</text>
-</svg>
