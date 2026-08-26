@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Receipt, Target, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,16 +25,12 @@ function Dual({ per, sign }: { per: Record<Currency, number>; sign?: boolean }) 
   );
 }
 
-function ChartTip({ active, payload, label }: { active?: boolean; payload?: { value: number; dataKey: string }[]; label?: string }) {
+function ChartTip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-2)] px-3 py-2 shadow-xl">
       <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--faint)]">{label}</div>
-      {payload.map((p) => (
-        <div key={p.dataKey} className="num-tab mt-0.5 font-mono text-[13px] font-bold">
-          {fmtMoney(p.value, { currency: p.dataKey === "cny" ? "CNY" : "RUB" })}
-        </div>
-      ))}
+      <div className="num-tab mt-0.5 font-mono text-[13px] font-bold">{fmtMoney(payload[0].value)}</div>
     </div>
   );
 }
@@ -109,6 +105,9 @@ export default function Dashboard({ month, setMonth, go, openAdd }: { month: str
   const dExp = delta(cur.RUB, prev.RUB, "expense");
 
   const balanceSeriesEnd = series[series.length - 1] ?? { rub: 0, cny: 0 };
+  const [chartCur, setChartCur] = useState<Currency>("RUB");
+  const chartData = useMemo(() => series.map((p) => ({ label: p.label, value: chartCur === "CNY" ? p.cny : p.rub })), [series, chartCur]);
+  const chartColor = chartCur === "CNY" ? "var(--income)" : "var(--accent)";
 
   return (
     <div className="space-y-5">
@@ -138,46 +137,44 @@ export default function Dashboard({ month, setMonth, go, openAdd }: { month: str
             <div className="font-display text-[14px] font-semibold">Динамика общего баланса</div>
             <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">последние 90 дней · без переводов</div>
           </div>
-          <div className="text-right">
-            <div className="num-tab font-mono text-[15px] font-bold" style={{ color: "var(--accent)" }}>{fmtMoney(balanceSeriesEnd.rub)}</div>
+          <div className="flex items-center gap-3">
             {hasCny && (
-              <div className="num-tab font-mono text-[12px] font-bold text-[var(--muted)]">{fmtMoney(balanceSeriesEnd.cny, { currency: "CNY" })}</div>
+              <div className="flex rounded-lg border border-[var(--line)] p-0.5">
+                {(["RUB", "CNY"] as const).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setChartCur(c)}
+                    className={`rounded-md px-2.5 py-1 font-mono text-[11px] font-bold transition-all ${
+                      chartCur === c ? "bg-[var(--accent-soft)] text-[var(--accent)]" : "text-[var(--muted)] hover:text-[var(--ink)]"
+                    }`}
+                  >
+                    {c === "RUB" ? "₽" : "¥"}
+                  </button>
+                ))}
+              </div>
             )}
+            <div className="num-tab font-mono text-[15px] font-bold" style={{ color: chartColor }}>
+              {fmtMoney(chartCur === "CNY" ? balanceSeriesEnd.cny : balanceSeriesEnd.rub, { currency: chartCur })}
+            </div>
           </div>
         </div>
         <div className="h-[220px] sm:h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={series} margin={{ top: 6, right: hasCny ? 4 : 4, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="balFillRub" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.28} />
-                  <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="balFillCny" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--income)" stopOpacity={0.22} />
-                  <stop offset="100%" stopColor="var(--income)" stopOpacity={0} />
+                <linearGradient id="balFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={chartColor} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--grid-line)" vertical={false} />
               <XAxis dataKey="label" interval={14} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
-              <YAxis yAxisId="rub" tickFormatter={compact} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
-              {hasCny && (
-                <YAxis yAxisId="cny" orientation="right" tickFormatter={compact} tick={{ fill: "var(--income)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
-              )}
+              <YAxis tickFormatter={compact} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
               <Tooltip content={<ChartTip />} cursor={{ stroke: "var(--line-strong)" }} />
-              <Area yAxisId="rub" dataKey="rub" name="₽" stroke="var(--accent)" strokeWidth={2} fill="url(#balFillRub)" dot={false} activeDot={{ r: 3.5 }} />
-              {hasCny && (
-                <Area yAxisId="cny" dataKey="cny" name="¥" stroke="var(--income)" strokeWidth={2} fill="url(#balFillCny)" dot={false} activeDot={{ r: 3.5 }} />
-              )}
+              <Area dataKey="value" stroke={chartColor} strokeWidth={2} fill="url(#balFill)" dot={false} activeDot={{ r: 3.5 }} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
-        {hasCny && (
-          <div className="mt-2 flex items-center gap-4 font-mono text-[10.5px] text-[var(--muted)]">
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />₽ рубли</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--income)" }} />¥ юани</span>
-          </div>
-        )}
       </div>
 
       {/* последние операции + бюджеты */}
