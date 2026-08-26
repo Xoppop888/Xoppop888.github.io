@@ -1,6 +1,7 @@
 import { RefreshCw, TrendingDown, TrendingUp, WifiOff } from "lucide-react";
 import { fmtRateDate, useRate } from "../rate";
 import { fmtMoney } from "../format";
+import { useToast } from "../ui";
 
 const nf2 = (n: number) =>
   new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
@@ -10,6 +11,12 @@ const nf4 = (n: number) =>
 /** Полоса курса юаня для дашборда. capitalCny — юаневый капитал для пересчёта в ₽. */
 export function RateCard({ capitalCny }: { capitalCny?: number }) {
   const { rate, inverse, date, source, loading, error, refresh } = useRate();
+  const toast = useToast();
+
+  const onRefresh = async () => {
+    const ok = await refresh();
+    toast.push(ok ? "Курс обновлён" : "Не удалось обновить курс — проверьте соединение", ok ? "ok" : "err");
+  };
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface)]">
@@ -77,7 +84,7 @@ export function RateCard({ capitalCny }: { capitalCny?: number }) {
             </span>
           )}
           <button
-            onClick={refresh}
+            onClick={onRefresh}
             disabled={loading}
             aria-label="Обновить курс"
             title="Обновить курс"
@@ -94,10 +101,16 @@ export function RateCard({ capitalCny }: { capitalCny?: number }) {
 /** Компактный чип курса для сайдбара. По клику — обновление. */
 export function RateChip() {
   const { rate, date, loading, error, refresh } = useRate();
+  const toast = useToast();
+
+  const onRefresh = async () => {
+    const ok = await refresh();
+    toast.push(ok ? "Курс обновлён" : "Не удалось обновить курс — проверьте соединение", ok ? "ok" : "err");
+  };
 
   return (
     <button
-      onClick={refresh}
+      onClick={onRefresh}
       disabled={loading}
       title={error ? "Ошибка — нажмите, чтобы повторить" : date ? `Курс на ${fmtRateDate(date)} · обновить` : "Обновить курс"}
       className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-left transition-all hover:border-[var(--accent)] disabled:opacity-60"

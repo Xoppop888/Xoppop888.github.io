@@ -2,13 +2,17 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from "react";
 
 /**
- * Курс CNY → RUB. Два бесплатных источника без ключа:
- *  1) Frankfurter (официальные справочные курсы ЕЦБ) — основной;
- *  2) open.er-api.com — запасной.
- * Результат кэшируется в localStorage (ЕЦБ обновляет курс раз в день),
+ * Курс CNY → RUB. Источники без ключа, по приоритету:
+ *  1) ЦБ РФ (cbr-xml-daily.ru, зеркало официального курса Банка России) — основной,
+ *     это тот же курс, который человек видит, гугля «курс юаня» из России;
+ *  2) Frankfurter (курсы ЕЦБ) — запасной (у ЕЦБ обычно нет официальной котировки RUB,
+ *     так что практически всегда падает дальше по цепочке);
+ *  3) open.er-api.com — последний запасной (средний межбанковский курс).
+ * Результат кэшируется в localStorage (ЦБ обновляет курс раз в день),
  * при загрузке используется стратегия stale-while-revalidate.
  */
 
+const CBR = "https://www.cbr-xml-daily.ru/daily_json.js";
 const FRANKFURTER = "https://api.frankfurter.app/latest?from=CNY&to=RUB";
 const OPEN_ER = "https://open.er-api.com/v6/latest/CNY";
 const CACHE_KEY = "moneta-cny-rate";
@@ -28,7 +32,7 @@ export interface RateApi {
   source: string | null;
   loading: boolean;
   error: string | null;
-  refresh: () => void;
+  refresh: () => Promise<boolean>;
 }
 
 function readCache(): RateData | null {
@@ -52,7 +56,21 @@ function writeCache(d: RateData) {
 }
 
 async function fetchRate(): Promise<RateData> {
-  // 1) Frankfurter — курсы ЕЦБ
+  // 1) ЦБ РФ — тот курс, что люди обычно ищут в интернете
+  try {
+    const res = await fetch(CBR);
+    if (res.ok) {
+      const j = await res.json();
+      const cny = j?.Valute?.CNY;
+      if (cny && typeof cny.Value === "number" && cny.Value > 0) {
+        const nominal = typeof cny.Nominal === "number" && cny.Nominal > 0 ? cny.Nominal : 1;
+        return { rate: cny.Value / nominal, date: String(j.Date).slice(0, 10), source: "ЦБ РФ", fetchedAt: Date.now() };
+      }
+    }
+  } catch {
+    /* переходим к запасным */
+  }
+  // 2) Frankfurter — курсы ЕЦБ
   try {
     const res = await fetch(FRANKFURTER);
     if (res.ok) {
@@ -65,7 +83,7 @@ async function fetchRate(): Promise<RateData> {
   } catch {
     /* переходим к запасному */
   }
-  // 2) open.er-api.com
+  // 3) open.er-api.com
   const res = await fetch(OPEN_ER);
   if (!res.ok) throw new Error("rate unavailable");
   const j = await res.json();
@@ -86,17 +104,20 @@ export function RateProvider({ children }: { children: ReactNode }) {
     dataRef.current = data;
   }, [data]);
 
-  const load = useCallback(async (silent: boolean) => {
+  const load = useCallback(async (silent: boolean): Promise<boolean> => {
     if (!silent) setLoading(true);
     setError(null);
     try {
       const d = await fetchRate();
       setData(d);
       writeCache(d);
+      return true;
     } catch {
-      // ошибку показываем, только если данных нет вообще (иначе — тихий revalidate).
+      // ошибку показываем, только если данных нет вообще (иначе — тихий revalidate,
+      // но вызывающая сторона всё равно узнаёт об этом через возвращаемое значение).
       // ВАЖНО: никаких setState внутри апдейтер-функций — React исполняет их в render-фазе
       if (!dataRef.current) setError("Не удалось получить курс");
+      return false;
     } finally {
       if (!silent) setLoading(false);
     }
@@ -126,7 +147,7 @@ export function RateProvider({ children }: { children: ReactNode }) {
       source: data?.source ?? null,
       loading,
       error,
-      refresh: () => void load(false),
+      refresh: () => load(false),
     }),
     [data, loading, error, load]
   );

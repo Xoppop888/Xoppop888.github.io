@@ -85,7 +85,7 @@ export default function Transactions({ openAdd, openEdit }: { openAdd: () => voi
         }
         return true;
       })
-      .sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : b.createdAt < a.createdAt ? 1 : -1));
+      .sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : a.createdAt < b.createdAt ? 1 : -1));
   }, [state, type, accountId, month, q]);
 
   const groups = useMemo(() => {

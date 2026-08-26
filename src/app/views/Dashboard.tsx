@@ -25,12 +25,16 @@ function Dual({ per, sign }: { per: Record<Currency, number>; sign?: boolean }) 
   );
 }
 
-function ChartTip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
+function ChartTip({ active, payload, label }: { active?: boolean; payload?: { value: number; dataKey: string }[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-[var(--line-strong)] bg-[var(--surface-2)] px-3 py-2 shadow-xl">
       <div className="font-mono text-[10px] uppercase tracking-wider text-[var(--faint)]">{label}</div>
-      <div className="num-tab mt-0.5 font-mono text-[13px] font-bold">{fmtMoney(payload[0].value)}</div>
+      {payload.map((p) => (
+        <div key={p.dataKey} className="num-tab mt-0.5 font-mono text-[13px] font-bold">
+          {fmtMoney(p.value, { currency: p.dataKey === "cny" ? "CNY" : "RUB" })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -48,27 +52,35 @@ export default function Dashboard({ month, setMonth, go, openAdd }: { month: str
   }, [state.accounts, balances]);
 
   const series = useMemo(() => {
-    const curOf: Record<string, string> = {};
+    const curOf: Record<string, Currency> = {};
     for (const a of state.accounts) curOf[a.id] = a.currency ?? "RUB";
     const txs = [...state.transactions].sort((a, b) => (a.date < b.date ? -1 : 1));
     const now = new Date();
-    const pts: { label: string; balance: number }[] = [];
+    const pts: { label: string; rub: number; cny: number }[] = [];
     for (let i = 89; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
       const iso = toISO(d);
-      let bal = 0;
+      let rub = 0;
+      let cny = 0;
       for (const t of txs) {
         if (t.date > iso) break;
-        if (t.type === "TRANSFER" || (curOf[t.accountId] ?? "RUB") !== "RUB") continue;
-        bal += t.type === "INCOME" ? t.amount : -t.amount;
+        if (t.type === "TRANSFER") continue;
+        const c = curOf[t.accountId] ?? "RUB";
+        const delta = t.type === "INCOME" ? t.amount : -t.amount;
+        if (c === "CNY") cny += delta;
+        else rub += delta;
       }
-      pts.push({ label: `${d.getDate()} ${monthShort(monthOf(iso))}`, balance: bal });
+      pts.push({ label: `${d.getDate()} ${monthShort(monthOf(iso))}`, rub, cny });
     }
     return pts;
   }, [state.transactions, state.accounts]);
 
   const recent = useMemo(
-    () => [...state.transactions].filter((t) => monthOf(t.date) === month).sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : 0)).slice(0, 7),
+    () =>
+      [...state.transactions]
+        .filter((t) => monthOf(t.date) === month)
+        .sort((a, b) => (a.date > b.date ? -1 : a.date < b.date ? 1 : a.createdAt < b.createdAt ? 1 : -1))
+        .slice(0, 7),
     [state.transactions, month]
   );
 
@@ -96,7 +108,7 @@ export default function Dashboard({ month, setMonth, go, openAdd }: { month: str
   const dInc = delta(cur.RUB, prev.RUB, "income");
   const dExp = delta(cur.RUB, prev.RUB, "expense");
 
-  const balanceSeriesSum = series[series.length - 1]?.balance ?? 0;
+  const balanceSeriesEnd = series[series.length - 1] ?? { rub: 0, cny: 0 };
 
   return (
     <div className="space-y-5">
@@ -124,27 +136,48 @@ export default function Dashboard({ month, setMonth, go, openAdd }: { month: str
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="font-display text-[14px] font-semibold">Динамика общего баланса</div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">последние 90 дней · в рублях, без переводов</div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--faint)]">последние 90 дней · без переводов</div>
           </div>
-          <div className="num-tab font-mono text-[15px] font-bold">{fmtMoney(balanceSeriesSum)}</div>
+          <div className="text-right">
+            <div className="num-tab font-mono text-[15px] font-bold" style={{ color: "var(--accent)" }}>{fmtMoney(balanceSeriesEnd.rub)}</div>
+            {hasCny && (
+              <div className="num-tab font-mono text-[12px] font-bold text-[var(--muted)]">{fmtMoney(balanceSeriesEnd.cny, { currency: "CNY" })}</div>
+            )}
+          </div>
         </div>
         <div className="h-[220px] sm:h-[260px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+            <AreaChart data={series} margin={{ top: 6, right: hasCny ? 4 : 4, left: 0, bottom: 0 }}>
               <defs>
-                <linearGradient id="balFill" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="balFillRub" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.28} />
                   <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="balFillCny" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="var(--income)" stopOpacity={0.22} />
+                  <stop offset="100%" stopColor="var(--income)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="var(--grid-line)" vertical={false} />
               <XAxis dataKey="label" interval={14} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={compact} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
+              <YAxis yAxisId="rub" tickFormatter={compact} tick={{ fill: "var(--faint)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
+              {hasCny && (
+                <YAxis yAxisId="cny" orientation="right" tickFormatter={compact} tick={{ fill: "var(--income)", fontSize: 10.5, fontFamily: "var(--font-mono)" }} axisLine={false} tickLine={false} width={40} />
+              )}
               <Tooltip content={<ChartTip />} cursor={{ stroke: "var(--line-strong)" }} />
-              <Area dataKey="balance" stroke="var(--accent)" strokeWidth={2} fill="url(#balFill)" dot={false} activeDot={{ r: 3.5 }} />
+              <Area yAxisId="rub" dataKey="rub" name="₽" stroke="var(--accent)" strokeWidth={2} fill="url(#balFillRub)" dot={false} activeDot={{ r: 3.5 }} />
+              {hasCny && (
+                <Area yAxisId="cny" dataKey="cny" name="¥" stroke="var(--income)" strokeWidth={2} fill="url(#balFillCny)" dot={false} activeDot={{ r: 3.5 }} />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        {hasCny && (
+          <div className="mt-2 flex items-center gap-4 font-mono text-[10.5px] text-[var(--muted)]">
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />₽ рубли</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: "var(--income)" }} />¥ юани</span>
+          </div>
+        )}
       </div>
 
       {/* последние операции + бюджеты */}
