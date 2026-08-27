@@ -56,6 +56,23 @@ function CoinMark({ size = 30 }: { size?: number }) {
   );
 }
 
+const LAST_BACKUP_KEY = "moneta-last-backup";
+const LAST_NAG_KEY = "moneta-last-backup-nag";
+const NAG_INTERVAL_DAYS = 30; // не чаще раза в месяц
+
+function readLastBackup(): number | null {
+  try {
+    const v = window.localStorage.getItem(LAST_BACKUP_KEY);
+    return v ? Number(v) : null;
+  } catch {
+    return null;
+  }
+}
+
+function daysAgo(ts: number): number {
+  return Math.floor((Date.now() - ts) / 86_400_000);
+}
+
 export default function Shell() {
   return (
     <RateProvider>
@@ -77,6 +94,7 @@ function ShellInner() {
   const [guideOpen, setGuideOpen] = useState(false); // «где найти приложение»
   const [backupUrl, setBackupUrl] = useState<string | null>(null); // ссылка на свежую копию
   const [backupName, setBackupName] = useState("");
+  const [lastBackup, setLastBackup] = useState<number | null>(() => readLastBackup());
 
   const exportBackup = () => {
     const blob = new Blob([api.exportJSON()], { type: "application/json" });
@@ -92,8 +110,43 @@ function ShellInner() {
     document.body.appendChild(a);
     a.click();
     a.remove();
+    const now = Date.now();
+    try {
+      window.localStorage.setItem(LAST_BACKUP_KEY, String(now));
+    } catch {
+      /* приватный режим — просто не запомним дату */
+    }
+    setLastBackup(now);
     toast.push("Копия готова — ссылка ниже", "ok");
   };
+
+  // ненавязчивое напоминание: раз в месяц, только если есть что терять
+  useEffect(() => {
+    if (state.transactions.length === 0) return;
+    const overdue = lastBackup == null ? true : daysAgo(lastBackup) >= NAG_INTERVAL_DAYS;
+    if (!overdue) return;
+    let lastNag: number | null = null;
+    try {
+      const v = window.localStorage.getItem(LAST_NAG_KEY);
+      lastNag = v ? Number(v) : null;
+    } catch {
+      /* игнор */
+    }
+    if (lastNag != null && daysAgo(lastNag) < NAG_INTERVAL_DAYS) return;
+    const t = window.setTimeout(() => {
+      toast.push(
+        lastBackup == null ? "У вас ещё нет резервной копии данных — сохраните в настройках" : "Резервная копия давно не обновлялась — стоит сделать новую",
+        "info"
+      );
+      try {
+        window.localStorage.setItem(LAST_NAG_KEY, String(Date.now()));
+      } catch {
+        /* игнор */
+      }
+    }, 1200);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onImportFile = (file: File | null) => {
     if (!file) return;
@@ -322,6 +375,22 @@ function ShellInner() {
             <span><b className="text-[var(--ink)]">{state.accounts.length}</b> счетов</span>
             <span><b className="text-[var(--ink)]">{state.categories.length}</b> категорий</span>
             <span><b className="text-[var(--ink)]">{state.budgets.length}</b> бюджетов</span>
+          </div>
+
+          {/* давность резервной копии */}
+          <div
+            className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 font-mono text-[11px] ${
+              lastBackup != null && daysAgo(lastBackup) < NAG_INTERVAL_DAYS
+                ? "border-[var(--income)]/40 bg-[var(--income-soft)] text-[var(--income)]"
+                : "border-[var(--warn)]/40 bg-[var(--warn-soft)] text-[var(--warn)]"
+            }`}
+          >
+            <Save size={13} />
+            {lastBackup == null
+              ? "Резервной копии ещё не было — сохраните на всякий случай"
+              : daysAgo(lastBackup) === 0
+                ? "Последняя копия: сегодня"
+                : `Последняя копия: ${daysAgo(lastBackup)} дн. назад`}
           </div>
 
           <button

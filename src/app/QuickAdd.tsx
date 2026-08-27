@@ -310,7 +310,7 @@ export default function QuickAdd({
           </div>
         )}
 
-        <div className="flex gap-2 pt-1">
+        <div className="-mx-5 sticky bottom-0 z-10 flex gap-2 border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
           <button
             type="button"
             onClick={onClose}
