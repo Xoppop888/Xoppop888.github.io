@@ -95,8 +95,12 @@ export function balancesOf(state: AppState): Record<string, number> {
   const map: Record<string, number> = {};
   for (const a of state.accounts) map[a.id] = 0;
   for (const t of state.transactions) {
-    map[t.accountId] = (map[t.accountId] ?? 0) + (t.type === "INCOME" ? t.amount : t.type === "EXPENSE" ? -t.amount : 0);
-    if (t.type === "TRANSFER" && t.toAccountId) map[t.toAccountId] = (map[t.toAccountId] ?? 0) + t.amount;
+    if (t.type === "INCOME") map[t.accountId] = (map[t.accountId] ?? 0) + t.amount;
+    else if (t.type === "EXPENSE") map[t.accountId] = (map[t.accountId] ?? 0) - t.amount;
+    else if (t.type === "TRANSFER") {
+      map[t.accountId] = (map[t.accountId] ?? 0) - t.amount; // списываем с источника
+      if (t.toAccountId) map[t.toAccountId] = (map[t.toAccountId] ?? 0) + t.amount; // зачисляем получателю
+    }
   }
   return map;
 }

@@ -230,9 +230,11 @@ function CategoryModal({
           <span className="text-[13px] font-semibold">{name.trim() || "Предпросмотр"}</span>
         </div>
         {err && <div className="animate-toast rounded-lg border border-[var(--expense)]/50 bg-[var(--expense-soft)] px-3 py-2 text-[12px] font-medium text-[var(--expense)]">{err}</div>}
-        <button type="submit" className="w-full rounded-xl bg-[var(--accent)] px-4 py-2.5 text-[13px] font-bold text-[var(--bg)] transition-all hover:brightness-110 active:scale-[0.98]">
-          {mode === "add" ? "Добавить" : "Сохранить"}
-        </button>
+        <div className="-mx-5 sticky bottom-0 z-10 border-t border-[var(--line)] bg-[var(--surface)] px-5 pt-3" style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}>
+          <button type="submit" className="w-full rounded-xl bg-[var(--accent)] px-4 py-2.5 text-[13px] font-bold text-[var(--bg)] transition-all hover:brightness-110 active:scale-[0.98]">
+            {mode === "add" ? "Добавить" : "Сохранить"}
+          </button>
+        </div>
       </form>
     </Modal>
   );

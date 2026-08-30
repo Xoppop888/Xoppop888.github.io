@@ -14,6 +14,7 @@ import {
   Tags,
   Target,
   Upload,
+  UserCircle2,
   WifiOff,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -24,6 +25,7 @@ import { RateProvider } from "./rate";
 import { RateChip } from "./components/RateCard";
 import InstallGuide from "./components/InstallGuide";
 import { Modal, ToastProvider, useToast } from "./ui";
+import { AuthModal, AuthProvider, authConfigured, useAuth } from "./auth";
 import QuickAdd from "./QuickAdd";
 import Dashboard from "./views/Dashboard";
 import Transactions from "./views/Transactions";
@@ -75,11 +77,13 @@ function daysAgo(ts: number): number {
 
 export default function Shell() {
   return (
-    <RateProvider>
-      <ToastProvider>
-        <ShellInner />
-      </ToastProvider>
-    </RateProvider>
+    <AuthProvider>
+      <RateProvider>
+        <ToastProvider>
+          <ShellInner />
+        </ToastProvider>
+      </RateProvider>
+    </AuthProvider>
   );
 }
 
@@ -92,6 +96,8 @@ function ShellInner() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [confirmImport, setConfirmImport] = useState<string | null>(null); // содержимое файла, ждущее подтверждения
   const [guideOpen, setGuideOpen] = useState(false); // «где найти приложение»
+  const [authOpen, setAuthOpen] = useState(false);
+  const { session, isPro } = useAuth();
   const [backupUrl, setBackupUrl] = useState<string | null>(null); // ссылка на свежую копию
   const [backupName, setBackupName] = useState("");
   const [lastBackup, setLastBackup] = useState<number | null>(() => readLastBackup());
@@ -295,6 +301,15 @@ function ShellInner() {
 
           <div className="mt-auto space-y-2">
             <RateChip />
+            {authConfigured && (
+              <button
+                onClick={() => setAuthOpen(true)}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[12px] text-[var(--faint)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--muted)]"
+              >
+                <UserCircle2 size={14} />
+                {session ? (isPro ? "Аккаунт · Pro" : session.user.email) : "Войти в аккаунт"}
+              </button>
+            )}
             {(canInstall || installed) && (
             <button
               onClick={install}
@@ -392,6 +407,15 @@ function ShellInner() {
                 ? "Последняя копия: сегодня"
                 : `Последняя копия: ${daysAgo(lastBackup)} дн. назад`}
           </div>
+
+          {authConfigured && (
+            <button
+              onClick={() => setAuthOpen(true)}
+              className="flex w-full items-center gap-2.5 rounded-xl border border-[var(--line)] px-4 py-3 text-left text-[13px] font-semibold text-[var(--muted)] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <UserCircle2 size={15} /> {session ? (isPro ? "Аккаунт · Pro" : session.user.email) : "Войти в аккаунт / купить Pro"}
+            </button>
+          )}
 
           <button
             onClick={install}
@@ -495,6 +519,7 @@ function ShellInner() {
       </Modal>
 
       <InstallGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
+      {authConfigured && <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />}
     </div>
   );
 }
